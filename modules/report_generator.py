@@ -2503,26 +2503,100 @@ def generate_pdf(data: dict, output_path: str) -> None:
         if valid_prio:
             story.append(Paragraph("AI Security Remediation Plan", S["h2"]))
             story.append(_divider())
+
+            # Colour palette per priority tier
+            _PRIO_PALETTE = {
+                "critical": ("#7F1D1D", "#FEE2E2", "#B91C1C"),  # bg, tint, accent
+                "high":     ("#78350F", "#FEF3C7", "#B45309"),
+                "medium":   ("#14532D", "#DCFCE7", "#15803D"),
+                "low":      ("#1E3A5F", "#EFF6FF", "#2563EB"),
+            }
+            _lbl_ps  = _ps("rp_lbl",  fontName="Helvetica-Bold", fontSize=7.5,
+                            textColor=colors.HexColor("#374151"))
+            _val_ps  = _ps("rp_val",  fontName="Helvetica",      fontSize=8,
+                            textColor=colors.HexColor("#1F2937"), leading=11)
+            _res_ps  = _ps("rp_res",  fontName="Helvetica",      fontSize=7,
+                            textColor=colors.HexColor("#64748B"), leading=10)
+
             for grp in valid_prio:
-                label   = grp.get("priority_group", "")
-                risk    = grp.get("business_risk", "")
-                summary = grp.get("remediation_summary", "")
-                count   = grp.get("findings_count", "")
-                sl      = label.lower()
-                col_hex = ("#B91C1C" if "critical" in sl else
-                           "#B45309" if "high"     in sl else
-                           "#15803D" if "medium"   in sl else "#64748B")
-                story.append(Paragraph(
-                    f"<b><font color='{col_hex}'>{label}</font></b>"
-                    f"<font color='#64748B' size='8'>  —  {count} finding(s)</font>",
-                    S["bold"],
-                ))
+                label     = grp.get("priority_group", "")
+                risk      = grp.get("business_risk", "")
+                summary   = grp.get("remediation_summary", "")
+                count     = grp.get("findings_count", "")
+                resources = grp.get("affected_resources", [])
+                sl        = label.lower()
+
+                tier = ("critical" if "critical" in sl else
+                        "high"     if "high"     in sl else
+                        "medium"   if "medium"   in sl else "low")
+                hdr_hex, tint_hex, acc_hex = _PRIO_PALETTE[tier]
+
+                # Header row — priority label + findings badge
+                hdr_ps = _ps(f"rp_h_{tier}", fontName="Helvetica-Bold", fontSize=9,
+                              textColor=colors.white, alignment=TA_LEFT)
+                cnt_ps = _ps(f"rp_c_{tier}", fontName="Helvetica-Bold", fontSize=9,
+                              textColor=colors.white, alignment=TA_RIGHT)
+                hdr_tbl = Table(
+                    [[Paragraph(label, hdr_ps),
+                      Paragraph(f"{count} finding(s)", cnt_ps)]],
+                    colWidths=[CONTENT_W * 0.75, CONTENT_W * 0.25],
+                )
+                hdr_tbl.setStyle(TableStyle([
+                    ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor(hdr_hex)),
+                    ("TOPPADDING",    (0, 0), (-1, -1), 6),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                    ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+                    ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                    ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                ]))
+
+                # Body rows — risk + actions + resources
+                body_rows = []
                 if risk:
-                    story.append(Paragraph(f"Business risk: {risk}", S["body"]))
+                    body_rows.append([
+                        Paragraph("Business Risk", _lbl_ps),
+                        Paragraph(risk, _val_ps),
+                    ])
                 if summary:
-                    story.append(Paragraph(summary, S["adv"]))
-                story.append(Spacer(1, 2 * mm))
-            story.append(Spacer(1, 3 * mm))
+                    body_rows.append([
+                        Paragraph("Actions", _lbl_ps),
+                        Paragraph(summary, _val_ps),
+                    ])
+                if resources:
+                    # Show first 8 resources; collapse the rest into "+N more"
+                    MAX_SHOW = 8
+                    shown    = resources[:MAX_SHOW]
+                    overflow = len(resources) - MAX_SHOW
+                    res_str  = ",  ".join(shown)
+                    if overflow > 0:
+                        res_str += f"  <i>(+{overflow} more)</i>"
+                    body_rows.append([
+                        Paragraph("Resources", _lbl_ps),
+                        Paragraph(res_str, _res_ps),
+                    ])
+
+                if body_rows:
+                    body_tbl = Table(
+                        body_rows,
+                        colWidths=[2.8 * cm, CONTENT_W - 2.8 * cm],
+                    )
+                    body_tbl.setStyle(TableStyle([
+                        ("BACKGROUND",    (0, 0), (-1, -1), colors.HexColor(tint_hex)),
+                        ("LEFTBORDER",    (0, 0), (0, -1), 3, colors.HexColor(acc_hex)),
+                        ("LINEAFTER",     (0, 0), (0, -1), 0.5, colors.HexColor("#D1D5DB")),
+                        ("LINEBEFORE",    (0, 0), (0, -1), 3,   colors.HexColor(acc_hex)),
+                        ("LINEBELOW",     (0, 0), (-1, -1), 0.3, colors.HexColor("#D1D5DB")),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 6),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+                        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                    ]))
+
+                story.append(KeepTogether([hdr_tbl] + ([body_tbl] if body_rows else [])))
+                story.append(Spacer(1, 3 * mm))
+
+            story.append(Spacer(1, 2 * mm))
 
         # ── Severity donut chart ─────────────────────────────────────────────
         if high_c + med_c + low_c > 0:
