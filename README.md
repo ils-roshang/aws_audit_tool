@@ -153,43 +153,6 @@ GCP_LOCATION=us-central1
 
 The IAM user or role must have the following read-only permissions:
 
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "AWSToolReadOnly",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:Describe*",
-        "rds:Describe*",
-        "lambda:List*", "lambda:Get*",
-        "s3:GetBucket*", "s3:ListAllMyBuckets",
-        "dynamodb:Describe*",
-        "elasticache:Describe*",
-        "ecs:Describe*", "ecs:List*",
-        "eks:Describe*", "eks:List*",
-        "redshift:Describe*",
-        "sqs:GetQueueAttributes", "sqs:ListQueues",
-        "tag:GetResources",
-        "config:ListDiscoveredResources",
-        "cloudwatch:GetMetricStatistics", "cloudwatch:ListMetrics",
-        "pi:DescribeDimensionKeys", "pi:GetResourceMetrics",
-        "ce:GetCostAndUsage", "ce:GetRightsizingRecommendation",
-        "iam:GetAccountSummary", "iam:ListUsers",
-        "iam:ListMFADevices", "iam:ListAccessKeys",
-        "iam:GetAccountPasswordPolicy",
-        "cloudtrail:DescribeTrails",
-        "guardduty:ListDetectors", "guardduty:GetDetector",
-        "cloudfront:ListDistributions",
-        "route53:ListHostedZones",
-        "sts:GetCallerIdentity"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
 
 ---
 
