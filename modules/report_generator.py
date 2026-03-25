@@ -1375,19 +1375,6 @@ def generate_pdf(data: dict, output_path: str) -> None:
             "No rightsizing recommendations were identified.", S["body"],
         ))
     else:
-        # Build AI guidance lookup — all implementation steps + validation per resource.
-        ai_lookup: dict = {}
-        for e in (ai_insights.get("recommendations_enhanced", [])
-                  if isinstance(ai_insights.get("recommendations_enhanced"), list) else []):
-            if isinstance(e, dict) and e.get("resource_id"):
-                steps      = e.get("implementation_steps", [])
-                validation = e.get("validation", "")
-                if steps:
-                    parts = [f"<b>{i + 1}.</b> {str(s).strip()}" for i, s in enumerate(steps)]
-                    if validation:
-                        parts.append(f"<i>✓ {validation.strip()}</i>")
-                    ai_lookup[e["resource_id"]] = "<br/>".join(parts)
-
         rows = []
         for rec in recs[:40]:
             rid      = rec.get("resource_name", rec.get("resource_id", "—"))
@@ -1458,9 +1445,27 @@ def generate_pdf(data: dict, output_path: str) -> None:
             rec_tbl.setStyle(TableStyle(type_cmds))
         story.append(rec_tbl)
 
-        # AI one-line guidance callout box
+        # ── AI Implementation Guidance cards ────────────────────────────
+        # Build a richer lookup that carries steps + validation + business impact.
+        ai_lookup_full: dict = {}
+        for e in (ai_insights.get("recommendations_enhanced", [])
+                  if isinstance(ai_insights.get("recommendations_enhanced"), list) else []):
+            if isinstance(e, dict) and e.get("resource_id"):
+                rid_key  = e["resource_id"]
+                steps    = e.get("implementation_steps", [])
+                valid    = e.get("validation", "").strip()
+                impact   = e.get("business_impact", "").strip()
+                rec_type = e.get("recommendation_type", "")
+                if steps:
+                    ai_lookup_full[rid_key] = {
+                        "steps":   steps,
+                        "valid":   valid,
+                        "impact":  impact,
+                        "type":    rec_type,
+                    }
+
         guided = [
-            (rec, ai_lookup.get(rec.get("resource_name", rec.get("resource_id", ""))))
+            (rec, ai_lookup_full.get(rec.get("resource_name", rec.get("resource_id", ""))))
             for rec in recs[:40]
         ]
         guided = [(r, g) for r, g in guided if g]
@@ -1468,26 +1473,83 @@ def generate_pdf(data: dict, output_path: str) -> None:
             story.append(Spacer(1, 3 * mm))
             story.append(Paragraph("AI Implementation Guidance", S["h2"]))
             story.append(_divider())
-            # Render as a two-column table: resource name | action
+
+            # Style constants for guidance cards
+            _g_step_ps   = _ps("g_step",   fontName="Helvetica",      fontSize=8,
+                                textColor=colors.HexColor("#1F2937"), leading=12)
+            _g_valid_ps  = _ps("g_valid",  fontName="Helvetica-Oblique", fontSize=7.5,
+                                textColor=colors.HexColor("#15803D"), leading=11)
+            _g_impact_ps = _ps("g_impact", fontName="Helvetica-Oblique", fontSize=7.5,
+                                textColor=colors.HexColor("#1D4ED8"), leading=11)
+            _g_rid_ps    = _ps("g_rid",    fontName="Helvetica-Bold",  fontSize=8,
+                                textColor=colors.HexColor("#1A2332"))
+            _g_type_ps   = _ps("g_type",   fontName="Helvetica",       fontSize=7,
+                                textColor=colors.HexColor("#64748B"))
+
+            _TYPE_ACCENT = {
+                "Over-provisioned":   "#B45309",
+                "Under-provisioned":  "#B91C1C",
+                "No-downsize target": "#1D4ED8",
+                "Review":             "#64748B",
+            }
+
             guidance_rows = []
-            for rec, guidance in guided:
-                rid = rec.get("resource_name", rec.get("resource_id", ""))
-                guidance_rows.append([
-                    Paragraph(f"<b>{rid[:35]}</b>", S["tbl_c"]),
-                    Paragraph(guidance, S["tbl_c"]),
-                ])
-            g_tbl = Table(guidance_rows,
-                          colWidths=[5.5 * cm, CONTENT_W - 5.5 * cm],
-                          spaceAfter=4)
+            for rec, gdata in guided:
+                rid      = rec.get("resource_name", rec.get("resource_id", ""))
+                svc      = rec.get("service", "").upper()
+                rec_type = gdata["type"]
+                steps    = gdata["steps"]
+                valid    = gdata["valid"]
+                impact   = gdata["impact"]
+                acc_hex  = _TYPE_ACCENT.get(rec_type, "#374151")
+
+                # Build the right-side content cell
+                step_parts = []
+                for i, s in enumerate(steps, 1):
+                    # Strip any leading repetition of the resource name from AI output
+                    s_clean = str(s).strip()
+                    for token in (rid, rid[:20]):
+                        s_clean = s_clean.replace(token + " ", "").replace(token, "")
+                    step_parts.append(f"<b>{i}.</b> {s_clean.strip()}.")
+                steps_para  = Paragraph("<br/>".join(step_parts), _g_step_ps)
+
+                right_cell = [steps_para]
+                if valid:
+                    right_cell.append(Spacer(1, 1.5 * mm))
+                    right_cell.append(Paragraph(f"<b>Verify:</b> {valid}", _g_valid_ps))
+                if impact:
+                    right_cell.append(Spacer(1, 1 * mm))
+                    right_cell.append(Paragraph(f"<b>Impact:</b> {impact}", _g_impact_ps))
+
+                # Left cell: resource name + service badge
+                left_cell = [
+                    Paragraph(f"<b>{rid[:32]}</b>", _g_rid_ps),
+                    Spacer(1, 1 * mm),
+                    Paragraph(svc, _g_type_ps),
+                    Spacer(1, 1 * mm),
+                    Paragraph(
+                        f"<font color='{acc_hex}'><b>{rec_type}</b></font>",
+                        _g_type_ps,
+                    ),
+                ]
+
+                guidance_rows.append([left_cell, right_cell])
+
+            g_tbl = Table(
+                guidance_rows,
+                colWidths=[4.8 * cm, CONTENT_W - 4.8 * cm],
+                spaceAfter=4,
+            )
             g_tbl.setStyle(TableStyle([
-                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, GHOST]),
-                ("GRID",          (0, 0), (-1, -1), 0.3, BORDER),
-                ("LINEABOVE",     (0, 0), (-1, 0),  1.5, TEAL),
-                ("TOPPADDING",    (0, 0), (-1, -1), 5),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-                ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
-                ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+                ("ROWBACKGROUNDS",  (0, 0), (-1, -1), [WHITE, GHOST]),
+                ("GRID",           (0, 0), (-1, -1), 0.3, BORDER),
+                ("LINEABOVE",      (0, 0), (-1, 0),  1.5, TEAL),
+                ("LINEBEFORE",     (0, 0), (0, -1),  3,   TEAL),
+                ("TOPPADDING",     (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING",  (0, 0), (-1, -1), 7),
+                ("LEFTPADDING",    (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING",   (0, 0), (-1, -1), 8),
+                ("VALIGN",         (0, 0), (-1, -1), "TOP"),
             ]))
             story.append(g_tbl)
 

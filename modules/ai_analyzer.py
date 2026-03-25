@@ -322,51 +322,70 @@ def _enhanced_recommendations(model, recommendations: list, billing: dict) -> li
             # Financial fields — let the model cite these verbatim.
             "savings_usd":         round(r.get("estimated_monthly_savings_usd", 0), 2),
             "cost_increase_usd":   round(r.get("estimated_monthly_cost_increase_usd", 0), 2),
+            # Pass the measured metric evidence so the model can cite real numbers.
             "reason":              r.get("reason", ""),
         }
         for r in recommendations[:30]
     ]
 
-    prompt = f"""You are a senior AWS cloud architect producing implementation guidance for a client-facing infrastructure audit report.
+    prompt = f"""You are a senior AWS cloud architect writing specific implementation guidance for a client infrastructure audit report.
 
 Recommendations to enhance:
 {json.dumps(compact, indent=2)}
 
-Each item's "recommendation_type" is one of:
-- "Over-provisioned": Resource is larger than needed — downsize to reduce cost.
-  "savings_usd" is the exact confirmed monthly saving from the AWS Pricing API.
-- "Under-provisioned": Resource is too small — upsize to prevent performance failure.
-  "cost_increase_usd" is the estimated additional monthly spend to fix this.
-- "No-downsize target": Metrics suggest over-provisioning but AWS has NO smaller instance type
-  in this family. savings_usd is $0.00. Goal: validate utilisation and explore alternatives.
-- "Review": No utilisation data available — verify necessity and right-size if warranted.
+"recommendation_type" definitions:
+- "Over-provisioned": Measured utilisation is far below threshold — downsize to cut cost.
+  savings_usd is the exact confirmed monthly saving from the AWS Pricing API.
+- "Under-provisioned": Measured utilisation is near or above threshold — upsize to prevent failures.
+  cost_increase_usd is the estimated additional monthly spend.
+- "No-downsize target": Metrics confirm over-provisioning but no smaller class exists in this instance
+  family. savings_usd is $0.00. Focus: identify a better-fit family or commitment discount.
+- "Review": No utilisation data — confirm whether the resource is still in active use.
 
-For EACH recommendation return a JSON object with exactly these keys:
-- "resource_id": string — copy exactly from input
-- "recommendation_type": string — copy exactly from input
-- "risk_level": string — map input severity: HIGH→"High", MEDIUM→"Medium", LOW→"Low"
-- "implementation_steps": array of exactly 2 specific imperative actions, each under 18 words
-    Over-provisioned:   [1. take service-appropriate snapshot of the resource,
-                         2. resize instance class from current_config to recommended_config]
-    Under-provisioned:  [1. schedule a maintenance window for the resize,
-                         2. resize instance class from current_config to recommended_config]
-    No-downsize target: [1. review CloudWatch utilisation metrics for the resource over 30 days,
-                         2. evaluate cross-family instance alternatives or Reserved Instance commitments]
-    Review:             [1. confirm whether the resource is actively used via CloudWatch Insights,
-                         2. decommission if idle, or right-size once utilisation data is available]
-- "validation": string — one precise sentence: how to confirm success and absence of regression.
-  Reference the specific metric to check (e.g. CPUUtilization, FreeableMemory, Invocations).
-- "business_impact": string — one precise sentence grounded in the financial fields:
-    Over-provisioned:   cite savings_usd as the exact monthly saving and annualised value
-    Under-provisioned:  cite cost_increase_usd as the monthly investment and the risk prevented
-    No-downsize target: state that no cost reduction via instance class change is available;
-                        suggest exploring Reserved Instance or Compute Savings Plan pricing
-    Review:             state the ongoing cost risk of retaining an unvalidated resource
+For EACH item return a JSON object with exactly these keys:
 
-Rules:
-- Reference the actual resource_id, current_config, and recommended_config in every step
-- Never use placeholder text or make up instance types
-- Do not invent or adjust the savings_usd or cost_increase_usd values
+"resource_id": copy verbatim from input.
+
+"recommendation_type": copy verbatim from input.
+
+"risk_level": map input severity HIGH→"High", MEDIUM→"Medium", LOW→"Low".
+
+"implementation_steps": array of exactly 2 actionable steps, each up to 25 words.
+  Derive steps from the actual service, current_config, recommended_config, and reason values — not generic advice.
+  Over-provisioned:    step 1 = create a service-appropriate backup or snapshot first;
+                       step 2 = resize using the correct AWS console path or CLI command for this service,
+                       citing the exact transition e.g. db.r5.large → db.r5.medium via RDS Modify.
+  Under-provisioned:   step 1 = schedule a maintenance window aligned to lowest-traffic hours for this workload;
+                       step 2 = resize to recommended_config using the service-specific console workflow,
+                       noting any service-restart window if applicable.
+  No-downsize target:  step 1 = check whether a Graviton-based equivalent class (e.g. db.t4g for RDS,
+                       m7g for EC2, cache.t4g for ElastiCache) is supported for this workload;
+                       step 2 = if workload is predictable, purchase a 1-year Reserved Instance or
+                       Compute Savings Plan for current_config to cut the bill by ~35-40 %% immediately.
+  Review:              step 1 = open CloudWatch and check the service-appropriate activity metric
+                       (e.g. DatabaseConnections for RDS, Invocations for Lambda) over the last 30 days;
+                       step 2 = if activity is zero or negligible, create a final snapshot and
+                       schedule decommission; otherwise collect baseline to right-size.
+
+CRITICAL: Do NOT mention the resource_id or resource name anywhere inside implementation_steps or
+validation — it is displayed in a separate column and repeating it wastes space and reads badly.
+
+"validation": one sentence stating the exact CloudWatch metric name AND a concrete pass/fail threshold
+  derived from the reason field (e.g. if reason says "Avg CPU 2.1%", write "Verify CPUUtilization
+  stays below 10 %% for 7 days post-resize before decommissioning the snapshot"). Must be specific.
+
+"business_impact": one sentence citing the precise financial outcome:
+  Over-provisioned:   state exact savings_usd/month and the annualised equivalent.
+  Under-provisioned:  state cost_increase_usd/month as the investment and the performance risk avoided.
+  No-downsize target: state that no class-change saving is available; a 1-year RI or Savings Plan
+                      at standard rates saves ~35 %% on current_config on-demand cost.
+  Review:             state that retaining an idle resource wastes its full on-demand cost each month
+                      until decommissioned.
+
+Strict rules:
+- Write service-specific, concrete guidance — NEVER copy the generic template phrases from this prompt
+- Do NOT invent or modify savings_usd or cost_increase_usd values
+- Do NOT use placeholder brackets like [metric_name] — fill in the real value
 - Return ONLY a valid JSON array — no prose, no markdown fences""".strip()
 
     raw = _call_gemini(model, prompt, "enhanced_recommendations")
