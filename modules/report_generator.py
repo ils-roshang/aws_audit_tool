@@ -714,20 +714,16 @@ def generate_pdf(data: dict, output_path: str) -> None:
     # ════════════════════════════════════════════════════════════════════════
     story.append(_sec("1.  Executive Summary"))
 
-    exec_text = ai_insights.get("executive_summary", "")
-    if exec_text:
-        story.append(Paragraph(exec_text, S["body"]))
-    else:
-        story.append(Paragraph(
-            f"This report covers <b>{len(resources)}</b> active AWS resources across "
-            f"<b>{len(regions)}</b> region(s). "
-            f"Total spend over the past 30 days was <b>{_usd(billing_30d)}</b>. "
-            f"<b>{len(recs)}</b> right-sizing recommendations were identified with combined "
-            f"potential monthly savings of <b>{_usd(total_savings)}</b>. "
-            f"The security audit identified <b>{high_c}</b> HIGH, <b>{med_c}</b> MEDIUM, "
-            f"and <b>{low_c}</b> LOW severity findings.",
-            S["body"],
-        ))
+    story.append(Paragraph(
+        f"This report covers <b>{len(resources)}</b> active AWS resources across "
+        f"<b>{len(regions)}</b> region(s). "
+        f"Total spend over the past 30 days was <b>{_usd(billing_30d)}</b>. "
+        f"<b>{len(recs)}</b> right-sizing recommendations were identified with combined "
+        f"potential monthly savings of <b>{_usd(total_savings)}</b>. "
+        f"The security audit identified <b>{high_c}</b> HIGH, <b>{med_c}</b> MEDIUM, "
+        f"and <b>{low_c}</b> LOW severity findings.",
+        S["body"],
+    ))
 
     # Key metrics recap strip
     story.append(Spacer(1, 3 * mm))
