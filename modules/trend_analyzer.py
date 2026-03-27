@@ -153,10 +153,10 @@ def _analyze_cost_trends(billing: dict) -> dict:
     projection_confidence = "HIGH" if window_count == 3 else ("MEDIUM" if window_count == 2 else "LOW")
 
     overall = {
-        "daily_avg_7d":          round(daily_7d,  2),
-        "daily_avg_15d":         round(daily_15d, 2),
-        "daily_avg_30d":         round(daily_30d, 2),
-        "prior_7d_daily_avg":    round(prior_7d_daily, 2),
+        "daily_avg_7d":          round(daily_7d,  4),
+        "daily_avg_15d":         round(daily_15d, 4),
+        "daily_avg_30d":         round(daily_30d, 4),
+        "prior_7d_daily_avg":    round(prior_7d_daily, 4),
         "direction":             direction,
         "trend_label":           overall_label,
         "prior_7d_total":        round(prior_7d_total, 2),
@@ -238,8 +238,14 @@ def _analyze_cost_trends(billing: dict) -> dict:
         -abs(s["change_pct"]),
     ))
 
-    fastest_growing = [s["service"] for s in by_service if s["direction"] == "INCREASING"][:5]
-    biggest_savers  = [s["service"] for s in by_service if s["direction"] == "DECREASING"][:5]
+    fastest_growing = [
+        s["service"] for s in by_service
+        if s["direction"] == "INCREASING" and s["daily_avg_30d"] > 0
+    ][:5]
+    biggest_savers  = [
+        s["service"] for s in by_service
+        if s["direction"] == "DECREASING" and s["daily_avg_7d"] > 0
+    ][:5]
 
     return {
         "overall":         overall,

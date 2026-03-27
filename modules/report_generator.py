@@ -2188,14 +2188,14 @@ def generate_pdf(data: dict, output_path: str) -> None:
                             else ("#15803D" if _mom_chg < -5 else "#1D4ED8"))
             _sc_rows.append([
                 _sv_name,
-                # Week column pair
-                _usd(_d15),   # prev week daily (days 8-15 average)
-                _usd(_d7),    # this week daily (last 7 days average)
-                f"<font color='{_wow_col}'><b>{_wow_sign}{_wow_chg:.0f}%</b></font>",
+                # Week column pair — 4dp so % is verifiable from displayed values
+                f"${_d15:,.4f}",   # prev week daily (days 8-15 average)
+                f"${_d7:,.4f}",    # this week daily (last 7 days average)
+                f"<font color='{_wow_col}'><b>{_wow_sign}{_wow_chg:.1f}%</b></font>",
                 # Month column pair
-                _usd(_d30),   # last month proxy (30-day rolling avg)
-                _usd(_cm_rate),  # actual current-month daily avg (MTD ÷ elapsed)
-                f"<font color='{_mom_col_svc}'><b>{_mom_sign}{_mom_chg:.0f}%</b></font>",
+                f"${_d30:,.4f}",   # last month proxy (30-day rolling avg)
+                f"${_cm_rate:,.4f}",  # actual current-month daily avg (MTD ÷ elapsed)
+                f"<font color='{_mom_col_svc}'><b>{_mom_sign}{_mom_chg:.1f}%</b></font>",
             ])
         # Column widths: Service | PrevWk | ThisWk | WoW% | LastMo | CurMo | MoM%
         _svc_col_w = [
@@ -3856,7 +3856,7 @@ def generate_excel(data: dict, output_path: str) -> None:
         "INFO":   PatternFill("solid", fgColor="EFF6FF"),
     }
 
-    ws_tr = wb.create_sheet("Trends & Patterns")
+    ws_tr = wb.create_sheet("Trends")
     ws_tr.sheet_view.showGridLines = False
     tr_row = 1
 
@@ -3875,21 +3875,23 @@ def generate_excel(data: dict, output_path: str) -> None:
     tr_row = _xl_sec(ws_tr, "COST TREND OVERVIEW", tr_row)
     _write_header(ws_tr, [
         "Direction", "7d Daily Avg", "Prior 7d Daily", "30d Daily Avg",
-        "WoW Delta $", "WoW Delta %", "Projected Monthly",
+        "WoW Delta $/day", "WoW Delta %", "Projected Monthly",
         "Confidence", "",
     ], tr_row)
     tr_row += 1
     _dir_xl   = _cto_xl.get("direction", "STABLE")
     _dir_fill = _XL_INC_FILL if _dir_xl == "INCREASING" else (_XL_DEC_FILL if _dir_xl == "DECREASING" else _XL_STA_FILL)
     _dir_font = Font(bold=True, color=_XL_DIR_COLOR.get(_dir_xl, "1D4ED8"))
-    _wow_d    = _cto_xl.get("wow_delta_usd",      0)
     _wow_p    = _cto_xl.get("wow_delta_pct",      0)
+    # WoW Delta in daily rate units — consistent with the daily avg columns displayed alongside it.
+    # wow_delta_usd is the 7-day TOTAL difference; dividing by 7 gives the per-day equivalent.
+    _wow_daily_d = _cto_xl.get("daily_avg_7d", 0) - _cto_xl.get("prior_7d_daily_avg", 0)
     _write_row(ws_tr, [
         _dir_xl,
-        f"${_cto_xl.get('daily_avg_7d',        0):,.3f}",
-        f"${_cto_xl.get('prior_7d_daily_avg',  0):,.3f}",
-        f"${_cto_xl.get('daily_avg_30d',        0):,.3f}",
-        f"+${_wow_d:,.2f}" if _wow_d >= 0 else f"-${abs(_wow_d):,.2f}",
+        f"${_cto_xl.get('daily_avg_7d',        0):,.4f}",
+        f"${_cto_xl.get('prior_7d_daily_avg',  0):,.4f}",
+        f"${_cto_xl.get('daily_avg_30d',        0):,.4f}",
+        f"+${_wow_daily_d:,.4f}/day" if _wow_daily_d >= 0 else f"-${abs(_wow_daily_d):,.4f}/day",
         f"{_wow_p:+.1f}%",
         f"${_cto_xl.get('cm_projected', _cto_xl.get('projected_monthly', 0)):,.2f}",
         _cto_xl.get("projection_confidence", "LOW"),
@@ -3905,7 +3907,7 @@ def generate_excel(data: dict, output_path: str) -> None:
     if _ct_svc_xl:
         tr_row = _xl_sec(ws_tr, "COST TREND BY SERVICE  (sorted by change magnitude)", tr_row)
         _write_header(ws_tr, [
-            "Service", "30d Daily Avg", "15d Daily Avg", "7d Daily Avg",
+            "Service", "30d Daily Avg", "7d Daily Avg",
             "Change %", "Direction", "Trend Label", "Consistent", "",
         ], tr_row)
         tr_row += 1
@@ -3916,7 +3918,6 @@ def generate_excel(data: dict, output_path: str) -> None:
             _write_row(ws_tr, [
                 _s.get("service", ""),
                 f"${_s.get('daily_avg_30d', 0):,.4f}",
-                f"${_s.get('daily_avg_15d', 0):,.4f}",
                 f"${_s.get('daily_avg_7d',  0):,.4f}",
                 f"{_s.get('change_pct', 0):+.1f}%",
                 _s_dir,
@@ -3924,8 +3925,8 @@ def generate_excel(data: dict, output_path: str) -> None:
                 _s_cons,
                 "",
             ], tr_row, alt=tr_row % 2 == 0)
-            ws_tr.cell(row=tr_row, column=6).fill = _s_fill
-            ws_tr.cell(row=tr_row, column=6).font = Font(bold=True, color=_XL_DIR_COLOR.get(_s_dir, "1D4ED8"))
+            ws_tr.cell(row=tr_row, column=5).fill = _s_fill
+            ws_tr.cell(row=tr_row, column=5).font = Font(bold=True, color=_XL_DIR_COLOR.get(_s_dir, "1D4ED8"))
             tr_row += 1
         tr_row += 1
 

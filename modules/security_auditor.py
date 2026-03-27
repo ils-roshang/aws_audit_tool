@@ -601,7 +601,7 @@ def check_rds(resources, regions, get_client):
                 "resource_type":  "AWS::RDS::DBInstance",
                 "region":         region,
                 "issue":          f"RDS instance '{rid}' is publicly accessible",
-                "recommendation": "Disable public accessibility and access the database through a bastion host or VPN.",
+                "recommendation": "Disable public accessibility and allow only authorized IP addresses.",
             })
 
         if not meta.get("storage_encrypted", False):
